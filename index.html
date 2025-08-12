@@ -1,0 +1,308 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>Common vs Without Common — Simulator</title>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<style>
+  :root{--bg:#0f1724;--panel:#0b1220;--accent:#6ee7b7;--muted:#94a3b8}
+  body{font-family:Inter,system-ui,Segoe UI,Roboto,Helvetica,Arial; margin:0; background:linear-gradient(180deg,#071022 0%, #071220 100%); color:#e6eef6; padding:18px}
+  h1{margin:0 0 12px 0;font-size:18px}
+  .top{display:flex;gap:12px;align-items:center;margin-bottom:14px;flex-wrap:wrap}
+  .control{background:var(--panel);padding:12px;border-radius:8px;display:flex;gap:8px;align-items:center}
+  label{font-size:13px;color:var(--muted);min-width:110px}
+  input[type=range]{width:180px}
+  .main{display:flex;gap:14px}
+  .panel{flex:1;background:linear-gradient(180deg,#06121b,#07172a);padding:14px;border-radius:10px;min-height:420px;box-shadow:0 6px 18px rgba(0,0,0,0.6)}
+  .panel h2{margin:0 0 8px 0;font-size:15px}
+  .kpi-grid{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+  .kpi{flex:1 1 45%;background:rgba(255,255,255,0.03);padding:8px;border-radius:8px}
+  .kpi b{display:block;font-size:16px}
+  .log{background:rgba(255,255,255,0.02);padding:8px;border-radius:8px;height:170px;overflow:auto;font-size:12px;color:#d6e6f5}
+  .controls{display:flex;gap:8px;margin-left:auto}
+  .btn{background:var(--accent);color:#042023;padding:8px 10px;border-radius:8px;border:0;cursor:pointer;font-weight:600}
+  .btn.secondary{background:transparent;color:var(--accent);border:1px solid rgba(110,231,183,0.12)}
+  .bars{display:flex;gap:8px;margin-top:10px}
+  .bar{flex:1;background:rgba(255,255,255,0.04);border-radius:6px;padding:6px;font-size:12px}
+  .bar .fill{height:14px;border-radius:6px;background:linear-gradient(90deg,var(--accent),#34d399);width:0%}
+  .toggles{display:flex;gap:6px;align-items:center}
+  .small{font-size:12px;color:var(--muted)}
+  footer{margin-top:12px;color:var(--muted);font-size:12px}
+</style>
+</head>
+<body>
+
+<h1>Simulator — With Common vs Without Common</h1>
+
+<div class="top">
+  <div class="control">
+    <label>Members</label>
+    <input id="members" type="range" min="50" max="2000" step="50" value="500" />
+    <div class="small" id="membersVal">500</div>
+  </div>
+
+  <div class="control">
+    <label>Proposals / month</label>
+    <input id="rate" type="range" min="1" max="200" value="24" />
+    <div class="small" id="rateVal">24</div>
+  </div>
+
+  <div class="control">
+    <label>Voter turnout %</label>
+    <input id="turnout" type="range" min="5" max="90" value="28" />
+    <div class="small" id="turnoutVal">28%</div>
+  </div>
+
+  <div class="controls">
+    <button id="play" class="btn">Play</button>
+    <button id="pause" class="btn secondary">Pause</button>
+    <button id="reset" class="btn secondary">Reset</button>
+  </div>
+</div>
+
+<div class="main">
+  <div class="panel" id="withCommon">
+    <h2>✅ With Common</h2>
+    <div class="kpi-grid">
+      <div class="kpi"><b id="wc_created">0</b><span class="small">Proposals created</span></div>
+      <div class="kpi"><b id="wc_approved">0</b><span class="small">Proposals approved</span></div>
+      <div class="kpi"><b id="wc_executed">0</b><span class="small">Executed</span></div>
+      <div class="kpi"><b id="wc_fail">0</b><span class="small">Execution failures</span></div>
+    </div>
+
+    <div class="bars">
+      <div class="bar"><div class="small">Avg time-to-execute (days)</div><div id="wc_time_bar" class="fill"></div></div>
+      <div class="bar"><div class="small">Transparency score</div><div id="wc_trans_bar" class="fill"></div></div>
+    </div>
+
+    <div style="margin-top:10px" class="small">Event log</div>
+    <div class="log" id="wc_log"></div>
+  </div>
+
+  <div class="panel" id="withoutCommon">
+    <h2>❌ Without Common</h2>
+    <div class="kpi-grid">
+      <div class="kpi"><b id="wo_created">0</b><span class="small">Proposals created</span></div>
+      <div class="kpi"><b id="wo_approved">0</b><span class="small">Proposals approved</span></div>
+      <div class="kpi"><b id="wo_executed">0</b><span class="small">Executed</span></div>
+      <div class="kpi"><b id="wo_fail">0</b><span class="small">Execution failures</span></div>
+    </div>
+
+    <div class="bars">
+      <div class="bar"><div class="small">Avg time-to-execute (days)</div><div id="wo_time_bar" class="fill"></div></div>
+      <div class="bar"><div class="small">Transparency score</div><div id="wo_trans_bar" class="fill"></div></div>
+    </div>
+
+    <div style="margin-top:10px" class="small">Event log</div>
+    <div class="log" id="wo_log"></div>
+  </div>
+</div>
+
+<footer>Simulation tick = 1 day. Faster proposals & lower errors show Common advantages.</footer>
+
+<script>
+/* Simple simulator — adjustable via controls above */
+const stateTemplate = () => ({
+  created: 0,
+  approved: 0,
+  executed: 0,
+  failed: 0,
+  totalExecTime: 0, // days across executed
+  execCount: 0,
+});
+
+let wc = stateTemplate();
+let wo = stateTemplate();
+
+const membersEl = document.getElementById('members');
+const rateEl = document.getElementById('rate');
+const turnoutEl = document.getElementById('turnout');
+
+const membersVal = document.getElementById('membersVal');
+const rateVal = document.getElementById('rateVal');
+const turnoutVal = document.getElementById('turnoutVal');
+
+membersEl.addEventListener('input', ()=> membersVal.textContent = membersEl.value);
+rateEl.addEventListener('input', ()=> rateVal.textContent = rateEl.value);
+turnoutEl.addEventListener('input', ()=> turnoutVal.textContent = turnoutEl.value + "%");
+
+const wc_log = document.getElementById('wc_log');
+const wo_log = document.getElementById('wo_log');
+
+const wc_created = document.getElementById('wc_created');
+const wc_approved = document.getElementById('wc_approved');
+const wc_executed = document.getElementById('wc_executed');
+const wc_fail = document.getElementById('wc_fail');
+
+const wo_created = document.getElementById('wo_created');
+const wo_approved = document.getElementById('wo_approved');
+const wo_executed = document.getElementById('wo_executed');
+const wo_fail = document.getElementById('wo_fail');
+
+const wc_time_bar = document.getElementById('wc_time_bar');
+const wo_time_bar = document.getElementById('wo_time_bar');
+const wc_trans_bar = document.getElementById('wc_trans_bar');
+const wo_trans_bar = document.getElementById('wo_trans_bar');
+
+let running = false;
+let tickMs = 200; // ms per simulated day
+let day = 0;
+
+document.getElementById('play').onclick = ()=> running = true;
+document.getElementById('pause').onclick = ()=> running = false;
+document.getElementById('reset').onclick = resetAll;
+
+function resetAll(){
+  running = false;
+  day = 0;
+  wc = stateTemplate();
+  wo = stateTemplate();
+  wc_log.innerHTML = ""; wo_log.innerHTML = "";
+  refreshUI();
+}
+
+function randPoisson(lambda) {
+  // naive Poisson using exponential interarrival (Knuth)
+  let L = Math.exp(-lambda);
+  let k = 0;
+  let p = 1;
+  while (p > L) {
+    k++;
+    p *= Math.random();
+  }
+  return k - 1;
+}
+
+function simulateDay(){
+  day++;
+  // parameters
+  const members = Number(membersEl.value);
+  const proposalsPerMonth = Number(rateEl.value);
+  const dailyLambda = Math.max(0.001, proposalsPerMonth / 30);
+  const turnout = Number(turnoutEl.value) / 100;
+
+  // generate proposals (same for both contexts)
+  const proposalsToday = randPoisson(dailyLambda);
+
+  for(let i=0;i<proposalsToday;i++){
+    // With Common
+    handleProposal('wc', members, turnout);
+    // Without Common
+    handleProposal('wo', members, turnout);
+  }
+
+  // occasionally there are delayed manual executions in Without Common
+  if(Math.random() < 0.05){
+    // simulate backlog execution attempt leading to extra failure chance
+    if(Math.random() < 0.12){
+      wo.failed += 1;
+      appendLog(wo_log, `Day ${day}: Manual payout error (delayed batch) — failure recorded`);
+    }
+  }
+
+  refreshUI();
+}
+
+function handleProposal(which, members, turnout){
+  const merit = 0.6 + (Math.random()-0.5)*0.2; // 0.5-0.7 typical
+  const voters = Math.max(1, Math.round(members * turnout * (0.7 + Math.random()*0.6)));
+  const approveProb = Math.min(0.99, merit * (0.4 + (voters / Math.max(1,members)))); // scaled
+  const createdAt = day;
+
+  if(which === 'wc'){
+    wc.created++;
+    appendLog(wc_log, `Day ${day}: Proposal created (#${wc.created}) — token-gated forum`);
+    // voting delay is short
+    const voteDelay = Math.max(1, Math.round(2 + Math.random()*4 - (members/1000))); // 2-6 days, slightly faster with more members
+    // automation: if approved, auto-exec within 1-2 days
+    const approved = Math.random() < approveProb;
+    if(approved){
+      wc.approved++;
+      appendLog(wc_log, `Day ${day+voteDelay}: Proposal #${wc.created} approved (voters:${voters})`);
+      const execDelay = 1 + Math.round(Math.random()*1); // quick automated execution
+      const failChance = 0.02; // low failure chance
+      if(Math.random() < failChance){
+        wc.failed++;
+        appendLog(wc_log, `Day ${day+voteDelay+execDelay}: Execution failed (edge-case)`);
+      } else {
+        wc.executed++;
+        wc.totalExecTime += (voteDelay + execDelay);
+        wc.execCount++;
+        appendLog(wc_log, `Day ${day+voteDelay+execDelay}: Executed successfully`);
+      }
+    } else {
+      appendLog(wc_log, `Day ${day+voteDelay}: Proposal #${wc.created} rejected (voters:${voters})`);
+    }
+  } else {
+    wo.created++;
+    appendLog(wo_log, `Day ${day}: Proposal created (#${wo.created}) — dispersed channels`);
+    // voting delay is longer and less efficient
+    const voteDelay = Math.max(3, Math.round(7 + Math.random()*10)); // 7-17 days typical
+    const approved = Math.random() < Math.max(0.15, approveProb - 0.12); // slightly lower approval due to noise
+    if(approved){
+      wo.approved++;
+      appendLog(wo_log, `Day ${day+voteDelay}: Proposal #${wo.created} approved (voters:${voters})`);
+      // manual execution often delayed and error-prone
+      const execDelay = Math.round(3 + Math.random()*14); // 3-17 days
+      const failChance = 0.12 + (Math.random()*0.06); // higher failure chance
+      if(Math.random() < failChance){
+        wo.failed++;
+        appendLog(wo_log, `Day ${day+voteDelay+execDelay}: Execution failed / rollback required`);
+      } else {
+        wo.executed++;
+        wo.totalExecTime += (voteDelay + execDelay);
+        wo.execCount++;
+        appendLog(wo_log, `Day ${day+voteDelay+execDelay}: Executed (manual)`);
+      }
+    } else {
+      appendLog(wo_log, `Day ${day+voteDelay}: Proposal #${wo.created} rejected (voters:${voters})`);
+    }
+  }
+}
+
+function appendLog(el, text){
+  const time = new Date().toLocaleTimeString();
+  const row = document.createElement('div');
+  row.textContent = text;
+  el.prepend(row);
+  // keep logs to reasonable size
+  while(el.children.length > 200) el.removeChild(el.lastChild);
+}
+
+function refreshUI(){
+  // KPIs
+  wc_created.textContent = wc.created;
+  wc_approved.textContent = wc.approved;
+  wc_executed.textContent = wc.executed;
+  wc_fail.textContent = wc.failed;
+
+  wo_created.textContent = wo.created;
+  wo_approved.textContent = wo.approved;
+  wo_executed.textContent = wo.executed;
+  wo_fail.textContent = wo.failed;
+
+  // avg exec times (normalized for visualization)
+  const wcAvg = wc.execCount ? (wc.totalExecTime / wc.execCount) : 0;
+  const woAvg = wo.execCount ? (wo.totalExecTime / wo.execCount) : 0;
+
+  // map to percentage bars (cap at 30 days)
+  wc_time_bar.style.width = Math.min(100, (wcAvg / 30 * 100)) + '%';
+  wo_time_bar.style.width = Math.min(100, (woAvg / 30 * 100)) + '%';
+
+  // transparency score: With Common high (80-99), Without lower (20-70)
+  const wcTrans = 80 + Math.min(19, Math.round((Math.random()*10)));
+  const woTrans = 25 + Math.min(70, Math.round((Math.random()*45)));
+  wc_trans_bar.style.width = wcTrans + '%';
+  wo_trans_bar.style.width = woTrans + '%';
+}
+
+// main loop
+let loop = setInterval(()=>{
+  if(running) simulateDay();
+}, tickMs);
+
+// initialize UI
+resetAll();
+</script>
+</body>
+</html>
